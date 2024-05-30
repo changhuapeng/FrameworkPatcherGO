@@ -1,0 +1,169 @@
+#!/sbin/sh
+#Dynamic Installer by @BlassGO --- Also uses code from @osm0sis and @topjohnwu
+
+#Basic functions
+true() { return 0; }
+false() { return 1; }
+echo2() { >&2 echo "$@"; }
+find_bin() { [ -n "$2" ] && echo "$2" || echo "$binary_paths" | while read path; do [ -e "$path/$1" ] && echo "$path/$1" && break; done; }
+ui_print() { while [ "$1" ]; do (! $BOOTMODE && [ -e "$OUTFD" ]) && echo -e "ui_print $1\nui_print" >> $OUTFD || echo "$1"; shift; done; }
+defined() { while [ "$1" ]; do eval "[ -z \"\${${1}}\" ]" && return 1; shift; done; return 0; }
+abort() { ui_print " " "$@" " "; exit 1; }
+import_info() { ( echo >> "$l/info.txt"; cat "$1" >> "$l/info.txt"; rm -f "$1" ) 2>/dev/null; }
+testrw() { local test return=0; for test; do if [ -d "$test" ]; then (rm -f "$test/.rw$$"; touch "$test/.rw$$" || echo > "$test/.rw$$") 2>/dev/null; if [ -f "$test/.rw$$" ]; then rm -f "$test/.rw$$"; else echo2 '!'"Read-Only: $test" && return=1; fi; else echo2 "Cant find: $test directory" && return=1; fi; done; return $return; }
+
+#Advanced functions
+get() {
+  local args=$# skip=0 from to in get rm root
+  while [ $args -gt 0 ]; do
+    case $1 in
+       -from)
+       from="$2"
+       skip=2;
+       ;;
+       -to)
+       to="$2"
+       skip=2;
+       ;;
+       -in)
+       in="$2"
+       skip=2;
+       ;;
+       *)
+       set -- "$@" "$1"
+       skip=1;
+       ;;
+    esac
+    shift $skip; args=$(($args-$skip)); 
+  done
+  [ -z "$from" -o ! -f "$from" ] && abort "ERROR: Invalid ZIP: \"$from\""
+  [ -z "$to" ] && to="$PWD"; to="${to%%/}/"
+  [ -n "$in" ] && in="${in%%/}/"
+  for get in "$@"; do
+     root="${in}$get"
+     echo2 "Getting: $get"
+     unzip -qo "$from" "$root" -d "$to"
+     if [ -f "${to}$root" ]; then
+        mv -f "${to}$root" "${to}$get"
+        chmod 755 "${to}$get"
+        if [ -f "${to}$get" ]; then
+           rm=${root%%/*}
+           [ "$rm" != "$root" -a -d "${to}$rm" ] && rm -rf "${to}$rm"
+        else abort "ERROR:2: Cant get $get"
+        fi
+     else abort "ERROR:1: Cant get $get"
+     fi
+  done
+}
+ensure_bin() {
+   local path bin
+   [ -z "$bb" ] && bb=$(find_bin busybox)
+   while [ "$1" ]; do
+      bin=
+      if [ ! -e "$(command -v "$1")" ]; then
+         bin=$(find_bin $1); [ -n "$bin" ] && bin="\"$bin\""
+         if [ -z "$bin" -a -n "$bb" ] && "$bb" --list | "$bb" grep -Eq "^$1$"; then bin="\"$bb\" $1"; fi
+         [ -n "$bin" ] && eval "$1() { $bin \"\$@\"; }"
+         ($needed && [ -z "$bin" ]) && abort "ERROR: Could not define \"$1\" binary"
+      fi
+      shift;
+   done
+}
+setup_bb() {
+   #Try to ensure /system/bin/sh
+   needed=false; ensure_bin umount ln
+   if [ ! -f /system/bin/sh ]; then
+      umount -l /system 2>/dev/null
+      mkdir -p /system/bin
+      ln -sf "$(command -v sh)" /system/bin/sh
+   fi
+   if [ -e "$bb" ]; then
+     if ! echo "read me" | "$bb" grep -q "read me"; then
+        abort "ERROR:4: BusyBox cannot load on this device!"
+     elif ! "$bb" --install -s "$l"; then
+        for i in $("$bb" --list); do
+          if ! ln -sf "$bb" "$l/$i" && ! "$bb" ln -sf "$bb" "$l/$i" && ! "$bb" ln -f "$bb" "$l/$i"; then
+            # create script wrapper if symlinking and hardlinking failed because of restrictive selinux policy
+            if ! echo "#!$bb" > "$l/$i" || ! chmod 755 "$l/$i"; then
+              abort "ERROR:2: Failed to setup BusyBox"
+            fi
+          fi
+        done
+     fi
+   else
+      abort "ERROR:1: Cant find BusyBox"
+   fi
+   [ ! -f "$l/sh" ] && abort "ERROR:3: Failed to setup BusyBox"
+}
+setup() {
+  #Ensure work DIRs
+  ( rm -rf "$l" "$TMP/zbin" ) 2>/dev/null
+  mkdir -p "$l" "$TMP/zbin"
+  [ ! -d "$l" -o ! -d "$TMP/zbin" ] && abort "ERROR: Cant startup"
+
+  #Ensure BusyBox and Bash
+  bb="$TMP/busybox"; bs="$TMP/bash"; ( rm -f "$bb" "$bs" ) 2>/dev/null
+  get busybox bash -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+  if ! echo "read me" | "$bb" grep -q "read me"; then
+     unsupport=true
+     bin=$(find_bin busybox)
+     [ -n "$bin" ] && cp -f "$bin" "$bb" && chmod 755 "$bb"
+     echo "read me" | "$bb" grep -q "read me" && echo2 "setup: Using \"$bin\"" || abort "setup: BusyBox cannot load on this device!"
+  fi
+  if [ -z "$("$bs" -c 'echo $BASH_VERSION')" ]; then
+     unsupport=true
+     bin=$(find_bin bash)
+     [ -n "$bin" ] && cp -f "$bin" "$bs" && chmod 755 "$bs"
+     [ -n "$("$bs" -c 'echo $BASH_VERSION')" ] && echo2 "setup: Using \"$bin\"" || abort "setup: BASH cannot load on this device!"
+  fi
+
+  #Remove only zbin plugins
+  ( rm -f "$TMP/bin" "$TMP/bin.xz" "$TMP/core") 2>/dev/null
+  
+  #Extracting zbin
+  get bin core -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+
+  #Ensure BusyBox Environment
+  setup_bb; export PATH="$l:$PATH"
+  
+  #Loading bin
+  mv -f "$TMP/bin" "$TMP/bin.xz" >/dev/null 2>&1
+  xz -d "$TMP/bin.xz" >/dev/null 2>&1
+  [ ! -f "$TMP/bin" ] && abort "setup: Cant get bin"
+  unzip -qo "$TMP/bin" -d "$TMP/zbin"
+  import_info "$TMP/zbin/info.txt"
+  
+  #Start Installation
+  $unsupport && echo2 "setup: Some actions may not work correctly, due to compatibility problems with the device!"
+  find "$TMP/zbin" -type f -exec mv -f {} "$l" \;
+  find "$l" -type f -exec chmod 755 {} +;
+  PATH="$PATH:/system/bin" "$bs" "$TMP/core" "$@"
+  [ $? == 130 ] && exit 1 || exit 0
+}
+
+#Get BOOTMODE and OUTFD
+ps | grep zygote | grep -qv grep && export BOOTMODE=true || export BOOTMODE=false
+$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -qv grep && export BOOTMODE=true
+[ -n "$2" -a -e "/proc/self/fd/$2" ] && export OUTFD="/proc/self/fd/$2"
+
+#Start
+umask 022
+unsupport=false
+binary_paths=$(echo -e "/sbin\n/system/bin")
+needed=true; ensure_bin unzip mkdir chmod mv
+needed=false; ensure_bin rm cp
+
+#Ensure Temp directory
+for TMP in /dev/tmp$$ /cache/tmp$$ /mnt/tmp$$ /data/tmp$$ /data/local/tmp$$; do
+    mkdir -p $TMP 2>/dev/null; testrw $TMP && break || TMP=
+done
+[ -n "$TMP" ] && export TMP || abort "ERROR: Failed to create temporary directory"
+
+#Global vars
+[ -f "$3" ] && export installzip="$3" ZIPFILE="$3" PERSISTDIR=/sbin/.magisk/mirror/persist || export installzip="$ZIPFILE" CUSTOM_SETUP=2
+export TMPDIR="$TMP" \
+DNM="META-INF/com/google/android/magisk" \
+cert="META-INF/zbin/version.txt" \
+l="$TMP/ugu"
+
+setup "$@"

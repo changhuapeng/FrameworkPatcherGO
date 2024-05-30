@@ -1,0 +1,31 @@
+#!/sbin/sh
+#Dynamic Installer by @BlassGO - CUSTOM SETUP
+echo2() { >&2 echo "$@"; }
+testrw() { local test return=0; for test; do if [ -d "$test" ]; then (rm -f "$test/.rw$$"; touch "$test/.rw$$" || echo > "$test/.rw$$") 2>/dev/null; if [ -f "$test/.rw$$" ]; then rm -f "$test/.rw$$"; else echo2 '!'"Read-Only: $test" && return=1; fi; else echo2 "Cant find: $test directory" && return=1; fi; done; return $return; }
+ps | grep zygote | grep -qv grep && export BOOTMODE=true || export BOOTMODE=false
+$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -qv grep && export BOOTMODE=true
+for TMPDIR in /tmp /data/tmp /dev/tmp /cache/tmp /mnt/tmp; do
+    (mkdir -p $TMPDIR; testrw $TMPDIR) 2>/dev/null && break || TMPDIR=
+done
+if [ -z "$TMPDIR" ]; then echo "setup: Failed to create temporary directory" && exit 1; fi
+export Dynamic_Setup=true
+rc="$TMPDIR/0000001.tmp"
+rm -rf "$TMPDIR" 2>/dev/null
+mkdir -p "$TMPDIR" 2>/dev/null
+if [ -z "$1" -a -e bash -a -e core -a -e busybox -a -e bin ]; then
+   cp -f bash "$TMPDIR"
+   chmod +x "$TMPDIR/bash"
+   if [ ! -x "$TMPDIR/bash" ]; then echo "setup: Invalid $TMPDIR" && exit 1; fi
+   echo '. ./core;rm -f "'$rc'"' > "$rc"
+   if [ ! -f "$rc" ]; then echo "setup: Invalid $rc" && exit 1; fi
+   "$TMPDIR/bash" --rcfile "$rc"
+elif [ -n "$1" -a -d "$1" -a -e "$1/bash" -a -e "$1/core" -a -e "$1/busybox" -a -e "$1/bin" ]; then
+   cp -f "$1/bash" "$TMPDIR"
+   chmod +x "$TMPDIR/bash"
+   if [ ! -x "$TMPDIR/bash" ]; then echo "setup: Invalid $TMPDIR" && exit 1; fi
+   echo '. "'$1'/core" "'$1'";rm -f "'$rc'"' > "$rc"
+   if [ ! -f "$rc" ]; then echo "setup: Invalid $rc" && exit 1; fi
+   "$TMPDIR/bash" --rcfile "$rc"
+else
+   echo "setup: CANNOT FIND A VALID ENVIRONMENT " && exit 1
+fi
