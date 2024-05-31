@@ -139,64 +139,81 @@ ui_print " "
 ui_print "******************************"
 ui_print "> Patching ApplicationPackageManager.smali file ..."
 ui_print "******************************"
-apm_line=$(grep -w "$app_package_manager_file" -e "$apm_method")
-apm_method_code=$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")
+ui_print "It is optional but recommended to patch this file if your device has StrongBox or app attestation key support."
+ui_print "Do you want to patch this file?"
+ui_print "- YES  [Press volume UP]"
+ui_print "- NO   [Press volume DOWN]"
 
-apm_return=$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
-apm_move_result=$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')
-apm_has_sys_feature=$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")
-apm_name=""
-apm_last_reg=""
-if [ -n "$apm_has_sys_feature" ]; then
-    apm_has_sys_feature=$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)
-    apm_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
-    apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")
-    apm_name=$(echo "$apm_has_sys_feature" | cut -d';' -f1)
-    apm_last_reg=$(echo "$apm_has_sys_feature" | cut -d';' -f2)
-fi
+if $yes; then
+    is_apm_patched=true
+    apm_line=$(grep -w "$app_package_manager_file" -e "$apm_method")
+    apm_method_code=$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")
 
-if [ -z "$apm_name" ]; then
-    abort "Name register not found in hasSystemFeature method"
-fi
+    apm_return=$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
+    apm_move_result=$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')
+    apm_has_sys_feature=$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")
+    apm_name=""
+    apm_last_reg=""
+    if [ -n "$apm_has_sys_feature" ]; then
+        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)
+        apm_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
+        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")
+        apm_name=$(echo "$apm_has_sys_feature" | cut -d';' -f1)
+        apm_last_reg=$(echo "$apm_has_sys_feature" | cut -d';' -f2)
+    fi
 
-if [ -z "$apm_last_reg" ]; then
-    abort "Last register not found in hasSystemFeature method"
-fi
+    if [ -z "$apm_name" ]; then
+        is_apm_patched=false
+        ui_print "Name register not found in hasSystemFeature method"
+    fi
 
-move_result_replacement="
+    if [ -z "$apm_last_reg" ]; then
+        is_apm_patched=false
+        ui_print "Last register not found in hasSystemFeature method"
+    fi
+
+    move_result_replacement="
     move-result $apm_last_reg
-"
+    "
 
-return_replacement="
+    return_replacement="
     return $apm_last_reg
-"
+    "
 
-has_sys_feature="
+    has_sys_feature="
     invoke-static {$apm_last_reg, $apm_name}, Lcom/android/internal/util/framework/Android;->hasSystemFeature(ZLjava/lang/String;)Z
 
     move-result $apm_last_reg
-"
-ui_print " "
-ui_print "--------------------"
-ui_print "Patching hasSystemFeature method:"
-ui_print " "
-ui_print "    $apm_move_result"
-ui_print " "
-ui_print "replaced by:"
-ui_print "$move_result_replacement"
-smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -replace-in-method "$apm_move_result" "$move_result_replacement"
-ui_print "--------------------"
-ui_print "$has_sys_feature"
-ui_print "added."
-smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -before-line "$apm_return" "$has_sys_feature"
-ui_print "--------------------"
-ui_print " "
-ui_print "    $apm_return"
-ui_print " "
-ui_print "replaced by:"
-ui_print "$return_replacement"
-smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -replace-in-method "$apm_return" "$return_replacement"
-ui_print "--------------------"
+    "
+
+    if [ "$is_apm_patched" = "true" ]; then
+        ui_print " "
+        ui_print "--------------------"
+        ui_print "Patching hasSystemFeature method:"
+        ui_print " "
+        ui_print "    $apm_move_result"
+        ui_print " "
+        ui_print "replaced by:"
+        ui_print "$move_result_replacement"
+        smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -replace-in-method "$apm_move_result" "$move_result_replacement"
+        ui_print "--------------------"
+        ui_print "$has_sys_feature"
+        ui_print "added."
+        smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -before-line "$apm_return" "$has_sys_feature"
+        ui_print "--------------------"
+        ui_print " "
+        ui_print "    $apm_return"
+        ui_print " "
+        ui_print "replaced by:"
+        ui_print "$return_replacement"
+        smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -replace-in-method "$apm_return" "$return_replacement"
+        ui_print "--------------------"
+    else
+        ui_print "Patching ApplicationPackageManager.smali failed"
+    fi
+else
+    ui_print "Patching ApplicationPackageManager.smali skipped"
+fi
 
 ui_print " "
 ui_print "******************************"
