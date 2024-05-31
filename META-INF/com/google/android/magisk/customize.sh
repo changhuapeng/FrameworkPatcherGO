@@ -129,7 +129,7 @@ ui_print "--------------------"
 
 app_package_manager_file=$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")
 app_package_manager_dex=$(classes_path_to_dex "$app_package_manager_file")
-apm_method="hasSystemFeature(Ljava/lang/String;)Z"
+apm_method="public whitelist.*hasSystemFeature(Ljava/lang/String;)Z"
 
 if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
     abort "hasSystemFeature method not found in ApplicationPackageManager.smali"
@@ -144,21 +144,15 @@ apm_method_code=$(string -f "$app_package_manager_file" extract "$apm_line" ".en
 
 apm_return=$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
 apm_move_result=$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')
-apm_has_sys_feature=$(echo "$apm_method_code" | grep "# Ljava/lang/String;")
+apm_has_sys_feature=$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")
 apm_name=""
 apm_last_reg=""
 if [ -n "$apm_has_sys_feature" ]; then
-    apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -e 's/^[[:blank:]]*//')
-    apm_name=$(echo "$apm_has_sys_feature" | cut -d',' -f1 | cut -d' ' -f2)
-else
-    apm_has_sys_feature=$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")
-    if [ -n "$apm_has_sys_feature" ]; then
-        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)
-        name_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
-        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -nE "$name_regex")
-        apm_name=$(echo "$apm_has_sys_feature" | cut -d';' -f1)
-        apm_last_reg=$(echo "$apm_has_sys_feature" | cut -d';' -f2)
-    fi
+    apm_has_sys_feature=$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)
+    apm_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
+    apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")
+    apm_name=$(echo "$apm_has_sys_feature" | cut -d';' -f1)
+    apm_last_reg=$(echo "$apm_has_sys_feature" | cut -d';' -f2)
 fi
 
 if [ -z "$apm_name" ]; then
