@@ -191,7 +191,7 @@ if $yes; then
         ui_print "--------------------"
         ui_print "Patching hasSystemFeature method:"
         ui_print " "
-        if [ "$(echo "$move_result_replacement" | sed -e 's/^[[:blank:]]*//')" != "$apm_move_result" ]; then
+        if ( ! echo "$move_result_replacement" | grep -qw "$apm_move_result" ); then
             ui_print "    $apm_move_result"
             ui_print " "
             ui_print "replaced by:"
@@ -203,7 +203,7 @@ if $yes; then
         ui_print "added."
         smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -before-line "$apm_return" "$has_sys_feature"
         ui_print "--------------------"
-        if [ "$(echo "$return_replacement" | sed -e 's/^[[:blank:]]*//')" != "$apm_return" ]; then
+        if ( ! echo "$return_replacement" | grep -qw "$apm_return" ); then
             ui_print " "
             ui_print "    $apm_return"
             ui_print " "
