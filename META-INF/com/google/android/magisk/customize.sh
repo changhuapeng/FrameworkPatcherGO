@@ -144,6 +144,7 @@ ui_print "Do you want to patch this file?"
 ui_print "- YES  [Press volume UP]"
 ui_print "- NO   [Press volume DOWN]"
 
+is_apm_patched=false
 if $yes; then
     is_apm_patched=true
     apm_line=$(grep -w "$app_package_manager_file" -e "$apm_method")
@@ -185,7 +186,6 @@ if $yes; then
 
     move-result $apm_last_reg
     "
-
     if [ "$is_apm_patched" = "true" ]; then
         ui_print " "
         ui_print "--------------------"
@@ -236,6 +236,11 @@ unzip -qo "$TMP/framework-patched.jar" \
           "$android_key_store_spi_dex" \
           "$instrumentation_dex" \
           -d "$TMP/framework-patched"
+if [ "$is_apm_patched" = "true" ]; then
+    unzip -qo "$TMP/framework-patched.jar" \
+          "$app_package_manager_dex" \
+          -d "$TMP/framework-patched"
+fi
 
 num_of_classes=$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "classes*.dex" | wc -l)
 mod_dex_name="classes$((num_of_classes+1)).dex"
