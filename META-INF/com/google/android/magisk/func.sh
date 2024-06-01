@@ -9,35 +9,35 @@ fi
 classes_path_to_dex() {
     path="$1"
     regex='s@^.+\/(smali(_classes[[:digit:]]+)*)\/.*\.smali$@\1@p'
-    classes=$(echo "$path" | sed -nE "$regex")
+    classes="$(echo "$path" | sed -nE "$regex")"
     case "$classes" in
         "smali" )
             echo "classes.dex"
             ;;
         *)
-            echo "$(echo $classes | cut -d'_' -f2).dex"
+            echo "$(echo "$classes" | cut -d'_' -f2).dex"
             ;;
     esac
 }
 
 get_context_val() {
     code="$1"
-    context=$(echo "$code" | grep "# Landroid/content/Context;")
+    context="$(echo "$code" | grep "# Landroid/content/Context;")"
     if [ -n "$context" ]; then
-     context=$(echo "$context" | sed -e 's/^[[:blank:]]*//')
-     context=$(echo "$context" | cut -d',' -f1 | cut -d' ' -f2)
+     context="$(echo "$context" | sed -e 's/^[[:blank:]]*//')"
+     context="$(echo "$context" | cut -d',' -f1 | cut -d' ' -f2)"
     else
-     context=$(echo "$code" | grep -m 1 "Landroid/content/Context;->" | head -n1)
+     context="$(echo "$code" | grep -m 1 "Landroid/content/Context;->" | head -n1)"
      if [ -n "$context" ]; then
          regex='s/^.+\{(.[[:digit:]])\}$/\1/p'
-         context=$(echo "$context" | cut -d',' -f1)
-         context=$(echo "$context" | sed -nE "$regex")
+         context="$(echo "$context" | cut -d',' -f1)"
+         context="$(echo "$context" | sed -nE "$regex")"
      else
-         context=$(echo "$code" | grep "Landroid/content/Context;)" | tail -n1)
+         context="$(echo "$code" | grep "Landroid/content/Context;)" | tail -n1)"
          if [ -n "$context" ]; then
-             context=$(echo "$context" | cut -d',' -f1-2)
+             context="$(echo "$context" | cut -d',' -f1-2)"
              regex='s/^.+\{.*,[[:blank:]](.[[:digit:]])\}$/\1/p'
-             context=$(echo "$context" | sed -nE "$regex")
+             context="$(echo "$context" | sed -nE "$regex")"
          fi
      fi
     fi

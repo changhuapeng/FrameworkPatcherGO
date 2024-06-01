@@ -36,8 +36,8 @@ ui_print "> Decompiling framework.jar ..."
 ui_print "******************************"
 apktool d "$stock_framework" -api "$API" --output "$TMP/framework"
 
-android_key_store_spi_file=$(find "$TMP/framework" -type f -name "AndroidKeyStoreSpi.smali")
-android_key_store_spi_dex=$(classes_path_to_dex "$android_key_store_spi_file")
+android_key_store_spi_file="$(find "$TMP/framework" -type f -name "AndroidKeyStoreSpi.smali")"
+android_key_store_spi_dex="$(classes_path_to_dex "$android_key_store_spi_file")"
 akss_method="engineGetCertificateChain"
 
 if (! grep -wlq "$android_key_store_spi_file" -e "$akss_method"); then
@@ -48,13 +48,13 @@ ui_print " "
 ui_print "******************************"
 ui_print "> Patching AndroidKeyStoreSpi.smali file..."
 ui_print "******************************"
-akss_line=$(grep -w "$android_key_store_spi_file" -e "$akss_method")
-akss_method_code=$(string -f "$android_key_store_spi_file" extract "$akss_line" ".end method")
+akss_line="$(grep -w "$android_key_store_spi_file" -e "$akss_method")"
+akss_method_code="$(string -f "$android_key_store_spi_file" extract "$akss_line" ".end method")"
 
-last_aput_obj=$(echo "$akss_method_code" | grep "aput-object" | tail -n1)
-last_aput_obj=$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')
+last_aput_obj="$(echo "$akss_method_code" | grep "aput-object" | tail -n1)"
+last_aput_obj="$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')"
 leaf_cert_regex='s/^[[:blank:]]*aput-object[[:blank:]]v[[:digit:]]+,[[:blank:]](v[[:digit:]]+),[[:blank:]]v[[:digit:]]+$/\1/p'
-leaf_cert=$(echo "$last_aput_obj" | sed -nE "$leaf_cert_regex")
+leaf_cert="$(echo "$last_aput_obj" | sed -nE "$leaf_cert_regex")"
 
 if [ -z "$leaf_cert" ]; then
     abort "Leaf certificate register not found in engineGetCertificateChain method"
@@ -72,8 +72,8 @@ ui_print "added."
 smali_kit -check -method "$akss_method" -file "$android_key_store_spi_file" -after-line "$last_aput_obj" "$eng_get_cert_chain"
 ui_print "--------------------"
 
-instrumentation_file=$(find "$TMP/framework" -type f -name "Instrumentation.smali")
-instrumentation_dex=$(classes_path_to_dex "$instrumentation_file")
+instrumentation_file="$(find "$TMP/framework" -type f -name "Instrumentation.smali")"
+instrumentation_dex="$(classes_path_to_dex "$instrumentation_file")"
 i_static_method="public static whitelist.*newApplication"
 i_method="public whitelist.*newApplication"
 
@@ -85,11 +85,11 @@ ui_print " "
 ui_print "******************************"
 ui_print "> Patching Instrumentation.smali file ..."
 ui_print "******************************"
-i_static_line=$(grep -w "$instrumentation_file" -e "$i_static_method")
-i_static_method_code=$(string -f "$instrumentation_file" extract "$i_static_line" ".end method")
+i_static_line="$(grep -w "$instrumentation_file" -e "$i_static_method")"
+i_static_method_code="$(string -f "$instrumentation_file" extract "$i_static_line" ".end method")"
 
-i_static_return=$(echo "$i_static_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
-i_static_context=$(get_context_val "$i_static_method_code")
+i_static_return="$(echo "$i_static_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
+i_static_context="$(get_context_val "$i_static_method_code")"
 
 if [ -z "$i_static_context" ]; then
     abort "Context register not found in newApplication static method"
@@ -106,11 +106,11 @@ ui_print "added."
 smali_kit -check -method "$i_static_method" -file "$instrumentation_file" -before-line "$i_static_return" "$static_new_app"
 ui_print "--------------------"
 
-i_line=$(grep -w "$instrumentation_file" -e "$i_method")
-i_method_code=$(string -f "$instrumentation_file" extract "$i_line" ".end method")
+i_line="$(grep -w "$instrumentation_file" -e "$i_method")"
+i_method_code="$(string -f "$instrumentation_file" extract "$i_line" ".end method")"
 
-i_return=$(echo "$i_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
-i_context=$(get_context_val "$i_method_code")
+i_return="$(echo "$i_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
+i_context="$(get_context_val "$i_method_code")"
 
 if [ -z "$i_context" ]; then
     abort "Context register not found in newApplication method"
@@ -127,8 +127,8 @@ ui_print "added."
 smali_kit -check -method "$i_method" -file "$instrumentation_file" -before-line "$i_return" "$new_app"
 ui_print "--------------------"
 
-app_package_manager_file=$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")
-app_package_manager_dex=$(classes_path_to_dex "$app_package_manager_file")
+app_package_manager_file="$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")"
+app_package_manager_dex="$(classes_path_to_dex "$app_package_manager_file")"
 apm_method="public whitelist.*hasSystemFeature(Ljava/lang/String;)Z"
 
 if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
@@ -147,20 +147,20 @@ ui_print "- NO   [Press volume DOWN]"
 is_apm_patched=false
 if $yes; then
     is_apm_patched=true
-    apm_line=$(grep -w "$app_package_manager_file" -e "$apm_method")
-    apm_method_code=$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")
+    apm_line="$(grep -w "$app_package_manager_file" -e "$apm_method")"
+    apm_method_code="$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")"
 
-    apm_return=$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')
-    apm_move_result=$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')
-    apm_has_sys_feature=$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")
+    apm_return="$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
+    apm_move_result="$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')"
+    apm_has_sys_feature="$(echo "$apm_method_code" | grep "Ljava/lang/String;I)")"
     apm_name=""
     apm_last_reg=""
     if [ -n "$apm_has_sys_feature" ]; then
-        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)
+        apm_has_sys_feature="$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)"
         apm_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
-        apm_has_sys_feature=$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")
-        apm_name=$(echo "$apm_has_sys_feature" | cut -d';' -f1)
-        apm_last_reg=$(echo "$apm_has_sys_feature" | cut -d';' -f2)
+        apm_has_sys_feature="$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")"
+        apm_name="$(echo "$apm_has_sys_feature" | cut -d';' -f1)"
+        apm_last_reg="$(echo "$apm_has_sys_feature" | cut -d';' -f2)"
     fi
 
     if [ -z "$apm_name" ]; then
@@ -191,7 +191,7 @@ if $yes; then
         ui_print "--------------------"
         ui_print "Patching hasSystemFeature method:"
         ui_print " "
-        if [ "$(echo $move_result_replacement | sed -e 's/^[[:blank:]]*//')" != "$apm_move_result" ]; then
+        if [ "$(echo "$move_result_replacement" | sed -e 's/^[[:blank:]]*//')" != "$apm_move_result" ]; then
             ui_print "    $apm_move_result"
             ui_print " "
             ui_print "replaced by:"
@@ -203,7 +203,7 @@ if $yes; then
         ui_print "added."
         smali_kit -check -method "$apm_method" -file "$app_package_manager_file" -before-line "$apm_return" "$has_sys_feature"
         ui_print "--------------------"
-        if [ "$(echo $return_replacement | sed -e 's/^[[:blank:]]*//')" != "$apm_return" ]; then
+        if [ "$(echo "$return_replacement" | sed -e 's/^[[:blank:]]*//')" != "$apm_return" ]; then
             ui_print " "
             ui_print "    $apm_return"
             ui_print " "
@@ -242,7 +242,7 @@ if [ "$is_apm_patched" = "true" ]; then
           -d "$TMP/framework-patched"
 fi
 
-num_of_classes=$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "classes*.dex" | wc -l)
+num_of_classes="$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "classes*.dex" | wc -l)"
 mod_dex_name="classes$((num_of_classes+1)).dex"
 ui_print "$num_of_classes dex files found in framework.jar"
 ui_print "FrameworkPatch's compiled classes.dex renamed to $mod_dex_name and patched to framework.jar"
@@ -260,12 +260,12 @@ if [ -e "$mod_framework" ]; then
     if [ "$BOOTMODE" ] && { [ "$KSU" ] || [ "$APATCH" ]; }; then
         find "/system/framework" -type f -name 'boot-framework.*' -print0 |
             while IFS= read -r -d '' line; do
-                mkdir -p "$(dirname $MODPATH$line)" && mknod "$MODPATH$line" c 0 0
+                mkdir -p "$(dirname "$MODPATH$line")" && mknod "$MODPATH$line" c 0 0
             done
     elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
         find "/system/framework" -type f -name 'boot-framework.*' -print0 |
             while IFS= read -r -d '' line; do
-                mkdir -p "$(dirname $MODPATH$line)" && touch "$MODPATH$line"
+                mkdir -p "$(dirname "$MODPATH$line")" && touch "$MODPATH$line"
             done
     fi
     ui_print "Some final touches ..."
