@@ -53,7 +53,7 @@ akss_method_code="$(string -f "$android_key_store_spi_file" extract "$akss_line"
 
 last_aput_obj="$(echo "$akss_method_code" | grep "aput-object" | tail -n1)"
 last_aput_obj="$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')"
-leaf_cert_regex='s/^[[:blank:]]*aput-object[[:blank:]]v[[:digit:]]+,[[:blank:]](v[[:digit:]]+),[[:blank:]]v[[:digit:]]+$/\1/p'
+leaf_cert_regex='s/^[[:blank:]]*aput-object[[:blank:]].[[:digit:]]+,[[:blank:]](.[[:digit:]]+),[[:blank:]].[[:digit:]]+$/\1/p'
 leaf_cert="$(echo "$last_aput_obj" | sed -nE "$leaf_cert_regex")"
 
 if [ -z "$leaf_cert" ]; then
@@ -157,7 +157,7 @@ if $yes; then
     apm_last_reg=""
     if [ -n "$apm_has_sys_feature" ]; then
         apm_has_sys_feature="$(echo "$apm_has_sys_feature" | cut -d',' -f1-3)"
-        apm_regex='s/^.+\{.[[:digit:]],[[:blank:]](.[[:digit:]]),[[:blank:]](.[[:digit:]])\}$/\1;\2/p'
+        apm_regex='s/^.+\{.[[:digit:]]+,[[:blank:]](.[[:digit:]]+),[[:blank:]](.[[:digit:]]+)\}$/\1;\2/p'
         apm_has_sys_feature="$(echo "$apm_has_sys_feature" | sed -nE "$apm_regex")"
         apm_name="$(echo "$apm_has_sys_feature" | cut -d';' -f1)"
         apm_last_reg="$(echo "$apm_has_sys_feature" | cut -d';' -f2)"
