@@ -1,0 +1,29 @@
+name: Zip & Upload Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    if: ${{ github.event.push.created || github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+
+    - name: Zipping release
+      id: zip
+      run: |
+        zip_filename="$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)-$GITHUB_REF_NAME.zip"
+        zip -r9 "$RUNNER_TEMP/$zip_filename" * -x .github .gitignore README.md
+        echo "zipfile=$RUNNER_TEMP/$zip_filename" >> $GITHUB_OUTPUT
+
+    - name: Uploading release
+      uses: softprops/action-gh-release@v2
+      with:
+        generate_release_notes: true
+        files: ${{ steps.zip.outputs.zipfile }}
