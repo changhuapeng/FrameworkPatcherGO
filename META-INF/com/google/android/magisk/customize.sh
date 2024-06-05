@@ -15,21 +15,30 @@ fi
 stock_framework="/system/framework/framework.jar"
 mod_framework="$MODPATH$stock_framework"
 
+ui_print " "
+ui_print "******************************"
+ui_print "> Pre-installation check ..."
+ui_print "******************************"
 real_modpath="$(echo "$MODPATH" | cut -d'_' -f1)/$(echo "$MODPATH" | cut -d'_' -f2 | cut -d'/' -f2)"
 if [ -e "$real_modpath$stock_framework" ] && [ ! -e "$real_modpath/disable" ]; then
-    ui_print "Existing Framework Patcher GO module found!"
-    abort "Please remove or disable the existing module before continuing."
+    ui_print "Existing Framework Patcher GO module is running!"
+    abort "Please uninstall or disable the module before continuing."
+else
+    ui_print "[ OK ] Checking for existing Framework Patcher GO module."
+fi
+
+if (! unzip -l "$stock_framework" | grep -q "classes.dex"); then
+    abort "/system/framework/framework.jar is not deodexed"
+else
+    ui_print "[ OK ] Checking for deodexed /system/framework/framework.jar."
 fi
 
 if (! unzip -l "$installzip" | grep -q "META-INF/com/google/android/magisk/dex/classes.dex"); then
     abort "No classes.dex in module's META-INF/com/google/android/magisk/dex directory"
+else
+    ui_print "[ OK ] Checking for required classes.dex file."
 fi
 
-if (! unzip -l "$stock_framework" | grep -q "classes.dex"); then
-   abort "framework.jar is not deodexed"
-fi
-
-ui_print "Installation may seem stuck at times, please wait patiently ..."
 ui_print " "
 ui_print "******************************"
 ui_print "> Decompiling framework.jar ..."
@@ -39,6 +48,8 @@ apktool d "$stock_framework" -api "$API" --output "$TMP/framework"
 android_key_store_spi_file="$(find "$TMP/framework" -type f -name "AndroidKeyStoreSpi.smali")"
 android_key_store_spi_dex="$(classes_path_to_dex "$android_key_store_spi_file")"
 akss_method="engineGetCertificateChain"
+ui_print " "
+ui_print "File found: $android_key_store_spi_file"
 
 if (! grep -wlq "$android_key_store_spi_file" -e "$akss_method"); then
     abort "engineGetCertificateChain method not found in AndroidKeyStoreSpi.smali"
@@ -50,6 +61,8 @@ ui_print "> Patching AndroidKeyStoreSpi.smali file..."
 ui_print "******************************"
 akss_line="$(grep -w "$android_key_store_spi_file" -e "$akss_method")"
 akss_method_code="$(string -f "$android_key_store_spi_file" extract "$akss_line" ".end method")"
+ui_print " "
+ui_print "Method found: $akss_line"
 
 last_aput_obj="$(echo "$akss_method_code" | grep "aput-object" | tail -n1)"
 last_aput_obj="$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')"
@@ -76,6 +89,8 @@ instrumentation_file="$(find "$TMP/framework" -type f -name "Instrumentation.sma
 instrumentation_dex="$(classes_path_to_dex "$instrumentation_file")"
 i_static_method="public static whitelist.*newApplication"
 i_method="public whitelist.*newApplication"
+ui_print " "
+ui_print "File found: $instrumentation_file"
 
 if (! grep -wlq "$instrumentation_file" -e "$i_static_method") && (! grep -wlq "$instrumentation_file" -e "$i_method"); then
     abort "newApplication method not in Instrumentation.smali"
@@ -87,6 +102,8 @@ ui_print "> Patching Instrumentation.smali file ..."
 ui_print "******************************"
 i_static_line="$(grep -w "$instrumentation_file" -e "$i_static_method")"
 i_static_method_code="$(string -f "$instrumentation_file" extract "$i_static_line" ".end method")"
+ui_print " "
+ui_print "Method found: $i_static_line"
 
 i_static_return="$(echo "$i_static_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
 i_static_context="$(get_context_val "$i_static_method_code")"
@@ -108,6 +125,8 @@ ui_print "--------------------"
 
 i_line="$(grep -w "$instrumentation_file" -e "$i_method")"
 i_method_code="$(string -f "$instrumentation_file" extract "$i_line" ".end method")"
+ui_print " "
+ui_print "Method found: $i_line"
 
 i_return="$(echo "$i_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
 i_context="$(get_context_val "$i_method_code")"
@@ -130,6 +149,8 @@ ui_print "--------------------"
 app_package_manager_file="$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")"
 app_package_manager_dex="$(classes_path_to_dex "$app_package_manager_file")"
 apm_method="public whitelist.*hasSystemFeature(Ljava/lang/String;)Z"
+ui_print " "
+ui_print "File found: $app_package_manager_file"
 
 if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
     abort "hasSystemFeature method not found in ApplicationPackageManager.smali"
@@ -149,6 +170,8 @@ if $yes; then
     is_apm_patched=true
     apm_line="$(grep -w "$app_package_manager_file" -e "$apm_method")"
     apm_method_code="$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")"
+    ui_print " "
+    ui_print "Method found: $apm_line"
 
     apm_return="$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
     apm_move_result="$(echo "$apm_method_code" | grep -e "move-result *" | sed -e 's/^[[:blank:]]*//')"
