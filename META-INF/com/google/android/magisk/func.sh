@@ -1,10 +1,20 @@
 if [ -f "/data/adb/magisk/busybox" ]; then
     unzip() { /data/adb/magisk/busybox unzip "$@"; }
+    wget() { /data/adb/magisk/busybox wget "$@"; }
 elif [ -f "/data/adb/ksu/bin/busybox" ]; then
     unzip() { /data/adb/ksu/bin/busybox unzip "$@"; }
+    wget() { /data/adb/ksu/bin/busybox wget "$@"; }
 elif [ -f "/data/adb/ap/bin/busybox" ]; then
     unzip() { /data/adb/ap/bin/busybox unzip "$@"; }
+    wget() { /data/adb/ap/bin/busybox wget "$@"; }
 fi
+
+get_framework_patch_url() {
+    FWPATCH_GH_URL="https://api.github.com/repos/changhuapeng/FrameworkPatch/releases/latest"
+    FILE="classes.dex"
+    regex="s#^[[:blank:]]*\"browser_download_url\":[[:blank:]]*\"(https.*$FILE)\"#\1#p"
+    wget -qO- "$FWPATCH_GH_URL" | sed -nE "$regex"
+}
 
 classes_path_to_dex() {
     path="$1"

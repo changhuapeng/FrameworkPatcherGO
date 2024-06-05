@@ -14,6 +14,7 @@ fi
 
 stock_framework="/system/framework/framework.jar"
 mod_framework="$MODPATH$stock_framework"
+classes_dex="$MODPATH/dex/classes.dex"
 
 ui_print " "
 ui_print "******************************"
@@ -33,8 +34,19 @@ else
     ui_print "[ OK ] Checking for deodexed /system/framework/framework.jar."
 fi
 
-if (! unzip -l "$installzip" | grep -q "META-INF/com/google/android/magisk/dex/classes.dex"); then
-    abort "No classes.dex in module's META-INF/com/google/android/magisk/dex directory"
+if [ ! -e "$classes_dex" ]; then
+    ui_print "Required classes.dex file is not found in META-INF/com/google/android/magisk/dex directory"
+    ui_print " "
+    ui_print "Do you want to download a pre-compiled classes.dex file from the FrameworkPatch source?"
+    ui_print "- YES  [Press volume UP]"
+    ui_print "- NO   [Press volume DOWN]"
+    if $yes; then
+        ui_print " "
+        ui_print "Downloading classes.dex ..."
+        wget --no-check-certificate -O "$classes_dex" "$(get_framework_patch_url)" 2>&1 || abort "Downloading failed";
+    else
+        abort "Please add your own classes.dex file."
+    fi
 else
     ui_print "[ OK ] Checking for required classes.dex file."
 fi
@@ -269,7 +281,7 @@ num_of_classes="$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "class
 mod_dex_name="classes$((num_of_classes+1)).dex"
 ui_print "$num_of_classes dex files found in framework.jar"
 ui_print "FrameworkPatch's compiled classes.dex renamed to $mod_dex_name and patched to framework.jar"
-mv "$MODPATH/dex/classes.dex" "$TMP/framework-patched/$mod_dex_name"
+mv "$classes_dex" "$TMP/framework-patched/$mod_dex_name"
 cd "$TMP/framework-patched" && zip -qr0 "$TMP/framework-patched.zip" .
 
 if [ ! -e "$TMP/framework-patched.zip" ]; then
@@ -292,7 +304,7 @@ if [ -e "$mod_framework" ]; then
             done
     fi
     ui_print "Some final touches ..."
-    rm -rf "$MODPATH/dex" "$MODPATH/func.sh"
+    rm -rf "$MODPATH/dex" "$MODPATH/func.sh" "$MODPATH/customize.sh"
     ui_print " "
     ui_print "FrameworkPatch set up successfully!"
 else
