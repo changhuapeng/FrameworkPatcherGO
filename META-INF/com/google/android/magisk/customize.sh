@@ -90,6 +90,7 @@ eng_get_cert_chain="
 
     move-result-object $leaf_cert
 "
+ui_print " "
 ui_print "--------------------"
 ui_print "Patching engineGetCertificateChain method:"
 ui_print "$eng_get_cert_chain"
