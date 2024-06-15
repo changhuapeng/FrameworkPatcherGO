@@ -34,22 +34,29 @@ get_context_val() {
     code="$1"
     context="$(echo "$code" | grep "# Landroid/content/Context;")"
     if [ -n "$context" ]; then
-     context="$(echo "$context" | sed -e 's/^[[:blank:]]*//')"
-     context="$(echo "$context" | cut -d',' -f1 | cut -d' ' -f2)"
+        context="$(echo "$context" | sed -e 's/^[[:blank:]]*//')"
+        context="$(echo "$context" | cut -d',' -f1 | cut -d' ' -f2)"
     else
-     context="$(echo "$code" | grep -m 1 "Landroid/content/Context;->" | head -n1)"
-     if [ -n "$context" ]; then
-         regex='s/^.+\{(.[[:digit:]])\}$/\1/p'
-         context="$(echo "$context" | cut -d',' -f1)"
-         context="$(echo "$context" | sed -nE "$regex")"
-     else
-         context="$(echo "$code" | grep "Landroid/content/Context;)" | tail -n1)"
-         if [ -n "$context" ]; then
-             context="$(echo "$context" | cut -d',' -f1-2)"
-             regex='s/^.+\{.*,[[:blank:]](.[[:digit:]])\}$/\1/p'
-             context="$(echo "$context" | sed -nE "$regex")"
-         fi
-     fi
+        context="$(echo "$code" | grep "Landroid/content/Context;->" | head -n1)"
+        if [ -n "$context" ]; then
+            regex='s/^.+\{(.[[:digit:]]+)\}$/\1/p'
+            context="$(echo "$context" | cut -d',' -f1)"
+            context="$(echo "$context" | sed -nE "$regex")"
+        else
+            context="$(echo "$code" | grep "attach(Landroid/content/Context;)" | tail -n1)"
+            if [ -n "$context" ]; then
+                context="$(echo "$context" | cut -d',' -f1-2)"
+                regex='s/^.+\{.*,[[:blank:]](.[[:digit:]]+)\}$/\1/p'
+                context="$(echo "$context" | sed -nE "$regex")"
+            else
+                context="$(echo "$code" | grep "Landroid/content/Context;)" | tail -n1)"
+                if [ -n "$context" ]; then
+                    context="$(echo "$context" | cut -d',' -f1)"
+                    regex='s/^.+\{(.[[:digit:]]+)\}$/\1/p'
+                    context="$(echo "$context" | sed -nE "$regex")"
+                fi
+            fi
+        fi
     fi
     echo "$context"
 }
