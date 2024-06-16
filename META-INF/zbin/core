@@ -75,7 +75,7 @@ create_file() { local file return=0; for file; do create_dir "$(dirname "$file")
 
 testrw() { local test return=0; for test; do if [ -d "$test" ]; then if grep " $(readlink -f "$test") " /proc/mounts | grep -Eq '(\(|[[:space:]]|,)ro(,|[[:space:]]|\))'; then echo2 '!'"Read-Only-Mount: $test" && return=2; else touch "$test/.rw$$" 2>/dev/null; if [ -f "$test/.rw$$" ]; then delete "$test/.rw$$" ; else echo2 '!'"Read-Only: $test" && return=1; fi; fi; else echo2 "Cant find: $test directory" && return=1; fi; done; return $return; }
 
-testvarname() { echo "$@" | grep -Eq '^[a-zA-Z_$][a-zA-Z_$0-9]*$'; }
+testvarname() { echo "$@" | grep -Eq '^[a-zA-Z_][a-zA-Z_0-9]*$'; }
 
 encode_b64() { echo "$@" | base64; }
 
@@ -587,16 +587,60 @@ convert_edify() {
    fi
 }
 
+get_var_refs() {
+   echo "$@" | grep -Eo '%[a-zA-Z_][a-zA-Z0-9_]*' | cut -c 2-
+}
+
 multi_option() {
-   local end="$2" i=0 loop=false
-   [ -z "$1" ] && return 0
-   [[ "$3" == "loop" ]] && loop=true 
+   local var="$1" end="$2" i=0 loop=false varname vars vars2 ref
+   local selected="${n}Selected %i" skipped="Skipped: %i"
+   [ -z "$var" ] && return 0
+   shift
+   while [ $# -gt 0 ]; do
+     case $1 in
+       loop)
+       loop=true
+       shift;
+       ;;
+       *=*)
+       varname="${1%%=*}"
+       if testvarname "$varname"; then
+          eval "$varname='${1#*=}'"
+       else
+          echo2 "Invalid variable name: $varname"
+          return 0
+       fi
+       shift;
+       ;;
+       *)
+       shift
+       ;;
+     esac
+   done
+   vars=$(get_var_refs "$selected")
+   vars2=$(get_var_refs "$skipped")
    while true; do
       i=$(($i+1))
-      if $yes; then ui_print "${n}Selected $i" && setdefault "$1" $i && return $i
-      else ui_print "Skipped: $i"
+      selectedout="$selected"
+      skippedout="$skipped"
+      for ref in $vars; do
+         selectedout="${selectedout//%$ref/${!ref}}"
+      done
+      for ref in $vars2; do
+         skippedout="${skippedout//%$ref/${!ref}}"
+      done
+      if $yes; then
+         ui_print "$selectedout"
+         setdefault $var $i
+         return $i
+      else ui_print "$skippedout"
       fi
-      if is_number $end && is_greater_equal $i $end; then if $loop; then i=0; echo " "; continue; else setdefault "$1" ""; return 0; fi; fi
+      if is_number $end && [ $i -ge $end ]; then
+         if $loop; then i=0; continue
+         else setdefault $var ""
+         return 0
+         fi
+      fi
    done
 }
 
@@ -861,7 +905,7 @@ update_file() {
 update_file_string() {
    local vars file array newprop prop propc xml result new old
    local restore flag d d2 huh tmp extract newprop2 backdir space space2 newspace nospace
-   local p TMP2
+   local p TMP2 ended
    restore=()
    while [[ $# -gt 0 ]]; do
    flag="$1"
@@ -945,14 +989,20 @@ update_file_string() {
                 newprop=
                 echo2 " WARNING: Abnormal xml $prop"
              fi
+             if [ -z "$newprop" ]; then continue; fi
+             echo2 ">>$newprop"
+             prop=$(echo "${newspace}${prop}" | sed -e 's/[]\/$*.^[]/\\&/g')
+             result=$(sed "s/.*$(string force escape "$newprop").*/${prop}/" "$tmp")
+             ended=$?
          fi   
          if [[ "$propc" == "1" ]]; then  
              newprop=$(echo "$prop" | cut -d '=' -f1 | tr -d " ")
+             if [ -z "$newprop" ]; then continue; fi
+             echo2 "::$newprop"
+             prop=$(echo "${newspace}${prop}" | sed -e 's/[]\/$*.^[]/\\&/g')
+             result=$(sed "s/^[ \t]*$(string force escape "$newprop")\=.*/${prop}/" "$tmp")
+             ended=$?
          fi  
-         if [ -z "$newprop" ]; then continue; fi
-         echo2 "::$newprop"
-         prop=$(echo "${newspace}${prop}" | sed -e 's/[]\/$*.^[]/\\&/g')
-         result=$(sed "s/.*$(string force escape "$newprop").*/${prop}/" "$tmp")
          if [ ! -z "$result" ]; then echo "$result" > "$tmp"; fi
    done
    if [ -n "$d" ]; then
@@ -963,7 +1013,7 @@ update_file_string() {
    inject "$tmp" "$(dirname "$file")"
    end_tmp 
    savestate new "$file"
-   if [[ "$old" != "$new" ]]; then true; else false; fi
+   if [[ "$old" != "$new" ]]; then true; else echo2 "ERROR: No real matches, content not modified: $file"; false; fi
 }
 
 update_file_addon() {
@@ -1158,19 +1208,22 @@ force_update_file_string() {
                 newprop=
                 echo2 " WARNING: Abnormal xml $prop"
              fi
+             if [ -z "$newprop" ]; then continue; fi
+             if [[ "$limit" == "1" ]]; then
+                sed -i '/^$/d' "$tmp"
+                last=$(tail -n 1 "$tmp")
+                sed -i '$d' "$tmp"
+             fi   
+             echo2 ">>$newprop"
+             result=$(sed "/$(string force escape "$newprop")/d" "$tmp")
          fi   
          if [[ "$propc" == "1" ]]; then  
              newprop=$(echo "$prop" | cut -d '=' -f1 | tr -d " ")
+             if [ -z "$newprop" ]; then continue; fi
+             echo2 "::$newprop"
+             result=$(sed "/^[ \t]*$(string force escape "$newprop")\=/d" "$tmp")
          fi  
-         if [ -z "$newprop" ]; then continue; fi
-         if [[ "$xml" == "1" && "$limit" == "1" ]]; then
-             sed -i '/^$/d' "$tmp"
-             last=$(tail -n 1 "$tmp")
-             sed -i '$d' "$tmp"
-         fi   
-         echo2 "::$newprop"
-         result=$(awk "!/$(string force escape "$newprop")/" "$tmp")
-         if [ ! -z "$result" ]; then echo "$result" > "$tmp"; fi
+         echo "$result" > "$tmp"
          echo "${newspace}${prop}" >> "$tmp"
    done
    if [[ "$xml" == "1" ]]; then
@@ -2761,11 +2814,9 @@ string() {
    return $return
 }
 
-chooseport_legacy() {
-  # Keycheck binary by someone755 @Github, idea for code below by Zappo @xda-developers
-  # Calling it first time detects previous input. Calling it second time will do what we want
-  [ "$1" ] && local delay=$1 || local delay=3
-  local error=false
+chooseport() {
+  # Keycheck binary by someone755 @Github
+  local error=0
   while true; do
     sleep 1
     keycheck
@@ -2774,46 +2825,11 @@ chooseport_legacy() {
       return 0
     elif [ $SEL -eq 41 ]; then
       return 1
-    elif $error; then
-      abort "Volume key not detected!"
     else
-      error=true
-      echo "Volume key not detected. Try again"
+      abort " ERROR: keycheck "
     fi
   done
 }
-
-chooseport() {
-  # Original idea by chainfire and ianmacd @xda-developers
-  [ "$1" ] && local delay=$1 || local delay=3
-  local error=false
-  while true; do
-    local count=0
-    while true; do
-      /system/bin/getevent -lqc 1 2>&1 > $TMP/events &
-      sleep 1; count=$((count + 1))
-      if (`grep -q 'KEY_VOLUMEUP *DOWN' $TMP/events`); then
-        return 0
-      elif (`grep -q 'KEY_VOLUMEDOWN *DOWN' $TMP/events`); then
-        return 1
-      fi
-      [ $count -gt 10 ] && break
-    done
-    if $error; then
-      # abort "Volume key not detected!"
-      echo "Volume key not detected. Trying keycheck method"
-      export chooseport=chooseport_legacy VKSEL=chooseport_legacy
-      chooseport_legacy $delay
-      return $?
-    else
-      error=true
-      echo "Volume key not detected. Try again"
-    fi
-  done
-}
-
-# Keep old variable from previous versions of this
-VKSEL=chooseport
 
 find_block() {
    local BLOCK DEV DEVICE DEVNAME PARTNAME UEVENT
@@ -5008,9 +5024,8 @@ set_progress() { [ -e "$OUTFD" ] && echo "set_progress $1" >> $OUTFD; }
 ui_print() {
   while [ "$1" ]; do
      if ! $BOOTMODE; then
-        local IFS=$'\n' line
-        for line in $1; do
-           [ -e "$OUTFD" ] && echo "ui_print $line${n}ui_print" >> $OUTFD || echo "$line"
+        echo "$1" | while read line; do
+            [ -e "$OUTFD" ] && echo "ui_print $line${n}ui_print" >> $OUTFD || echo "$line"
         done
      else 
        echo "$1"

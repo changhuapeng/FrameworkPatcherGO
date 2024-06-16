@@ -118,21 +118,30 @@ setup() {
   fi
 
   #Remove only zbin plugins
-  ( rm -f "$TMP/bin" "$TMP/bin.xz" "$TMP/core") 2>/dev/null
-  
+  ( rm -f "$TMP/bin" "$TMP/bin.xz" "$TMP/extra.zip" "$TMP/core") 2>/dev/null
+
   #Extracting zbin
   get bin core -from "$installzip" -in "META-INF/zbin" -to "$TMP"
 
+  #Extracting extra.zip (Optional)
+  unzip -l "$installzip" META-INF/addons/extra.zip | grep -q extra.zip && get extra.zip -from "$installzip" -in "META-INF/addons" -to "$TMP"
+
   #Ensure BusyBox Environment
   setup_bb; export PATH="$l:$PATH"
-  
+
   #Loading bin
   mv -f "$TMP/bin" "$TMP/bin.xz" >/dev/null 2>&1
   xz -d "$TMP/bin.xz" >/dev/null 2>&1
   [ ! -f "$TMP/bin" ] && abort "setup: Cant get bin"
   unzip -qo "$TMP/bin" -d "$TMP/zbin"
   import_info "$TMP/zbin/info.txt"
-  
+
+  #Loading extra.zip (Optional)
+  if [ -f "$TMP/extra.zip" ]; then
+     unzip -qo "$TMP/extra.zip" -d "$TMP/zbin"
+     import_info "$TMP/zbin/info.txt"
+  fi
+
   #Start Installation
   $unsupport && echo2 "setup: Some actions may not work correctly, due to compatibility problems with the device!"
   find "$TMP/zbin" -type f -exec mv -f {} "$l" \;
@@ -164,6 +173,7 @@ done
 export TMPDIR="$TMP" \
 DNM="META-INF/com/google/android/magisk" \
 cert="META-INF/zbin/version.txt" \
+addons="$TMP/addons" \
 l="$TMP/ugu"
 
 setup "$@"
