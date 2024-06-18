@@ -1,6 +1,6 @@
 id=FrameworkPatcherGo
 name=Framework Patcher GO
-version=v1.1.0
-versionCode=10100
+version=v1.1.1
+versionCode=10101
 author=changhuapeng
 description=Modify framework.jar directly on the phone, to build a valid system-level certificate chain. Based on chiteroman's FrameworkPatch.
