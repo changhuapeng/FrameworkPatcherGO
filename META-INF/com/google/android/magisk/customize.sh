@@ -40,8 +40,8 @@ if [ ! -e "$classes_dex" ]; then
     ui_print "Do you want to download a pre-compiled classes.dex file from the FrameworkPatch source?"
     ui_print "- YES  [Press volume UP]"
     ui_print "- NO   [Press volume DOWN]"
+    ui_print " "
     if $yes; then
-        ui_print " "
         ui_print "Downloading classes.dex ..."
         wget --no-check-certificate -O "$classes_dex" "$(get_framework_patch_url)" 2>&1 || abort "Downloading failed";
     else
@@ -56,11 +56,15 @@ ui_print "******************************"
 ui_print "> Decompiling framework.jar ..."
 ui_print "******************************"
 apktool d "$stock_framework" -api "$API" --output "$TMP/framework"
+to_recompile=false
 
+ui_print " "
+ui_print "******************************"
+ui_print "> Patching AndroidKeyStoreSpi.smali file..."
+ui_print "******************************"
 android_key_store_spi_file="$(find "$TMP/framework" -type f -name "AndroidKeyStoreSpi.smali")"
 android_key_store_spi_dex="$(classes_path_to_dex "$android_key_store_spi_file")"
 akss_method="engineGetCertificateChain"
-ui_print " "
 ui_print "File found: $android_key_store_spi_file"
 
 if (! grep -wlq "$android_key_store_spi_file" -e "$akss_method"); then
@@ -68,41 +72,51 @@ if (! grep -wlq "$android_key_store_spi_file" -e "$akss_method"); then
 fi
 
 ui_print " "
-ui_print "******************************"
-ui_print "> Patching AndroidKeyStoreSpi.smali file..."
-ui_print "******************************"
-akss_line="$(grep -w "$android_key_store_spi_file" -e "$akss_method")"
-akss_method_code="$(string -f "$android_key_store_spi_file" extract "$akss_line" ".end method")"
+ui_print "This patch is for spoofing a locked bootloader for local attestation."
+ui_print "Do you want to apply this patch?"
+ui_print "- YES  [Press volume UP]"
+ui_print "- NO   [Press volume DOWN]"
 ui_print " "
-ui_print "Method found: $akss_line"
 
-last_aput_obj="$(echo "$akss_method_code" | grep "aput-object" | tail -n1)"
-last_aput_obj="$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')"
-leaf_cert_regex='s/^[[:blank:]]*aput-object[[:blank:]].[[:digit:]]+,[[:blank:]](.[[:digit:]]+),[[:blank:]].[[:digit:]]+$/\1/p'
-leaf_cert="$(echo "$last_aput_obj" | sed -nE "$leaf_cert_regex")"
+if $yes; then
+    akss_line="$(grep -w "$android_key_store_spi_file" -e "$akss_method")"
+    akss_method_code="$(string -f "$android_key_store_spi_file" extract "$akss_line" ".end method")"
+    ui_print "Method found: $akss_line"
 
-if [ -z "$leaf_cert" ]; then
-    abort "Leaf certificate register not found in engineGetCertificateChain method"
+    last_aput_obj="$(echo "$akss_method_code" | grep "aput-object" | tail -n1)"
+    last_aput_obj="$(echo "$last_aput_obj" | sed -e 's/^[[:blank:]]*//')"
+    leaf_cert_regex='s/^[[:blank:]]*aput-object[[:blank:]].[[:digit:]]+,[[:blank:]](.[[:digit:]]+),[[:blank:]].[[:digit:]]+$/\1/p'
+    leaf_cert="$(echo "$last_aput_obj" | sed -nE "$leaf_cert_regex")"
+
+    if [ -z "$leaf_cert" ]; then
+        abort "Leaf certificate register not found in engineGetCertificateChain method"
+    fi
+
+    eng_get_cert_chain="
+        invoke-static {$leaf_cert}, Lcom/android/internal/util/framework/Android;->engineGetCertificateChain([Ljava/security/cert/Certificate;)[Ljava/security/cert/Certificate;
+
+        move-result-object $leaf_cert
+    "
+    ui_print " "
+    ui_print "--------------------"
+    ui_print "Patching engineGetCertificateChain method:"
+    ui_print "$eng_get_cert_chain"
+    ui_print "added."
+    smali_kit -check -method "$akss_method" -file "$android_key_store_spi_file" -after-line "$last_aput_obj" "$eng_get_cert_chain"
+    ui_print "--------------------"
+    to_recompile=true
+else
+    ui_print "Skipped patch for AndroidKeyStoreSpi.smali"
 fi
 
-eng_get_cert_chain="
-    invoke-static {$leaf_cert}, Lcom/android/internal/util/framework/Android;->engineGetCertificateChain([Ljava/security/cert/Certificate;)[Ljava/security/cert/Certificate;
-
-    move-result-object $leaf_cert
-"
 ui_print " "
-ui_print "--------------------"
-ui_print "Patching engineGetCertificateChain method:"
-ui_print "$eng_get_cert_chain"
-ui_print "added."
-smali_kit -check -method "$akss_method" -file "$android_key_store_spi_file" -after-line "$last_aput_obj" "$eng_get_cert_chain"
-ui_print "--------------------"
-
+ui_print "******************************"
+ui_print "> Patching Instrumentation.smali file ..."
+ui_print "******************************"
 instrumentation_file="$(find "$TMP/framework" -type f -name "Instrumentation.smali")"
 instrumentation_dex="$(classes_path_to_dex "$instrumentation_file")"
 i_static_method="public static whitelist.*newApplication"
 i_method="public whitelist.*newApplication"
-ui_print " "
 ui_print "File found: $instrumentation_file"
 
 if (! grep -wlq "$instrumentation_file" -e "$i_static_method") && (! grep -wlq "$instrumentation_file" -e "$i_method"); then
@@ -110,59 +124,69 @@ if (! grep -wlq "$instrumentation_file" -e "$i_static_method") && (! grep -wlq "
 fi
 
 ui_print " "
-ui_print "******************************"
-ui_print "> Patching Instrumentation.smali file ..."
-ui_print "******************************"
-i_static_line="$(grep -w "$instrumentation_file" -e "$i_static_method")"
-i_static_method_code="$(string -f "$instrumentation_file" extract "$i_static_line" ".end method")"
+ui_print "This patch is for spoofing system properties to pass Play Integrity."
+ui_print "Do you want to apply this patch?"
+ui_print "- YES  [Press volume UP]"
+ui_print "- NO   [Press volume DOWN]"
 ui_print " "
-ui_print "Method found: $i_static_line"
 
-i_static_return="$(echo "$i_static_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
-i_static_context="$(get_context_val "$i_static_method_code")"
+if $yes; then
+    i_static_line="$(grep -w "$instrumentation_file" -e "$i_static_method")"
+    i_static_method_code="$(string -f "$instrumentation_file" extract "$i_static_line" ".end method")"
+    ui_print "Method found: $i_static_line"
 
-if [ -z "$i_static_context" ]; then
-    abort "Context register not found in newApplication static method"
+    i_static_return="$(echo "$i_static_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
+    i_static_context="$(get_context_val "$i_static_method_code")"
+
+    if [ -z "$i_static_context" ]; then
+        abort "Context register not found in newApplication static method"
+    fi
+
+    static_new_app="
+        invoke-static {$i_static_context}, Lcom/android/internal/util/framework/Android;->newApplication(Landroid/content/Context;)V
+    "
+    ui_print " "
+    ui_print "--------------------"
+    ui_print "Patching newApplication static method:"
+    ui_print "$static_new_app"
+    ui_print "added."
+    smali_kit -check -method "$i_static_method" -file "$instrumentation_file" -before-line "$i_static_return" "$static_new_app"
+    ui_print "--------------------"
+
+    i_line="$(grep -w "$instrumentation_file" -e "$i_method")"
+    i_method_code="$(string -f "$instrumentation_file" extract "$i_line" ".end method")"
+    ui_print " "
+    ui_print "Method found: $i_line"
+
+    i_return="$(echo "$i_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
+    i_context="$(get_context_val "$i_method_code")"
+
+    if [ -z "$i_context" ]; then
+        abort "Context register not found in newApplication method"
+    fi
+
+    new_app="
+        invoke-static {$i_context}, Lcom/android/internal/util/framework/Android;->newApplication(Landroid/content/Context;)V
+    "
+    ui_print " "
+    ui_print "--------------------"
+    ui_print "Patching newApplication method:"
+    ui_print "$new_app"
+    ui_print "added."
+    smali_kit -check -method "$i_method" -file "$instrumentation_file" -before-line "$i_return" "$new_app"
+    ui_print "--------------------"
+    to_recompile=true
+else
+    ui_print "Skipped patch for Instrumentation.smali"
 fi
 
-static_new_app="
-    invoke-static {$i_static_context}, Lcom/android/internal/util/framework/Android;->newApplication(Landroid/content/Context;)V
-"
 ui_print " "
-ui_print "--------------------"
-ui_print "Patching newApplication static method:"
-ui_print "$static_new_app"
-ui_print "added."
-smali_kit -check -method "$i_static_method" -file "$instrumentation_file" -before-line "$i_static_return" "$static_new_app"
-ui_print "--------------------"
-
-i_line="$(grep -w "$instrumentation_file" -e "$i_method")"
-i_method_code="$(string -f "$instrumentation_file" extract "$i_line" ".end method")"
-ui_print " "
-ui_print "Method found: $i_line"
-
-i_return="$(echo "$i_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
-i_context="$(get_context_val "$i_method_code")"
-
-if [ -z "$i_context" ]; then
-    abort "Context register not found in newApplication method"
-fi
-
-new_app="
-    invoke-static {$i_context}, Lcom/android/internal/util/framework/Android;->newApplication(Landroid/content/Context;)V
-"
-ui_print " "
-ui_print "--------------------"
-ui_print "Patching newApplication method:"
-ui_print "$new_app"
-ui_print "added."
-smali_kit -check -method "$i_method" -file "$instrumentation_file" -before-line "$i_return" "$new_app"
-ui_print "--------------------"
-
+ui_print "******************************"
+ui_print "> Patching ApplicationPackageManager.smali file ..."
+ui_print "******************************"
 app_package_manager_file="$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")"
 app_package_manager_dex="$(classes_path_to_dex "$app_package_manager_file")"
 apm_method="public whitelist.*hasSystemFeature(Ljava/lang/String;)Z"
-ui_print " "
 ui_print "File found: $app_package_manager_file"
 
 if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
@@ -170,20 +194,17 @@ if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
 fi
 
 ui_print " "
-ui_print "******************************"
-ui_print "> Patching ApplicationPackageManager.smali file ..."
-ui_print "******************************"
-ui_print "It is optional but recommended to patch this file if your device has StrongBox or app attestation key support."
-ui_print "Do you want to patch this file?"
+ui_print "This patch is optional but recommended if your device has StrongBox or app attestation key support."
+ui_print "Do you want to apply this patch?"
 ui_print "- YES  [Press volume UP]"
 ui_print "- NO   [Press volume DOWN]"
+ui_print " "
 
 is_apm_patched=false
 if $yes; then
     is_apm_patched=true
     apm_line="$(grep -w "$app_package_manager_file" -e "$apm_method")"
     apm_method_code="$(string -f "$app_package_manager_file" extract "$apm_line" ".end method")"
-    ui_print " "
     ui_print "Method found: $apm_line"
 
     apm_return="$(echo "$apm_method_code" | tail -n1 | sed -e 's/^[[:blank:]]*//')"
@@ -252,64 +273,68 @@ if $yes; then
         ui_print "Patching ApplicationPackageManager.smali failed"
     fi
 else
-    ui_print "Patching ApplicationPackageManager.smali skipped"
+    ui_print "Skipped patch for ApplicationPackageManager.smali"
 fi
 
 ui_print " "
-ui_print "******************************"
-ui_print "> Recompiling framework.jar ..."
-ui_print "******************************"
-ui_print "This may take a while, please wait."
-apktool b "$TMP/framework" -api "$API" --copy-original --output "$TMP/framework-patched.jar"
+if [ "$to_recompile" = "true" ]; then
+    ui_print "******************************"
+    ui_print "> Recompiling framework.jar ..."
+    ui_print "******************************"
+    ui_print "This may take a while, please wait."
+    apktool b "$TMP/framework" -api "$API" --copy-original --output "$TMP/framework-patched.jar"
 
-ui_print " "
-ui_print "******************************"
-ui_print "> Setting up FrameworkPatch ..."
-ui_print "******************************"
-mkdir -p "$(dirname "$mod_framework")"
-unzip -qo "$stock_framework" -d "$TMP/framework-patched"
-unzip -qo "$TMP/framework-patched.jar" \
-          "$android_key_store_spi_dex" \
-          "$instrumentation_dex" \
-          -d "$TMP/framework-patched"
-if [ "$is_apm_patched" = "true" ]; then
+    ui_print " "
+    ui_print "******************************"
+    ui_print "> Setting up FrameworkPatch ..."
+    ui_print "******************************"
+    mkdir -p "$(dirname "$mod_framework")"
+    unzip -qo "$stock_framework" -d "$TMP/framework-patched"
     unzip -qo "$TMP/framework-patched.jar" \
-          "$app_package_manager_dex" \
-          -d "$TMP/framework-patched"
-fi
-
-num_of_classes="$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "classes*.dex" | wc -l)"
-mod_dex_name="classes$((num_of_classes+1)).dex"
-ui_print "$num_of_classes dex files found in framework.jar"
-ui_print "FrameworkPatch's compiled classes.dex renamed to $mod_dex_name and patched to framework.jar"
-mv "$classes_dex" "$TMP/framework-patched/$mod_dex_name"
-cd "$TMP/framework-patched" && zip -qr0 "$TMP/framework-patched.zip" .
-
-if [ ! -e "$TMP/framework-patched.zip" ]; then
-    abort "Modifying framework.jar failed"
-fi
-
-ui_print "Optimising framework.jar with zipalign"
-zipalign -f -p -z 4 "$TMP/framework-patched.zip" "$mod_framework"
-if [ -e "$mod_framework" ]; then
-    ui_print "Cleaning boot-framework files ..."
-    if [ "$BOOTMODE" ] && { [ "$KSU" ] || [ "$APATCH" ]; }; then
-        find "/system/framework" -type f -name 'boot-framework.*' -print0 |
-            while IFS= read -r -d '' line; do
-                mkdir -p "$(dirname "$MODPATH$line")" && mknod "$MODPATH$line" c 0 0
-            done
-    elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
-        find "/system/framework" -type f -name 'boot-framework.*' -print0 |
-            while IFS= read -r -d '' line; do
-                mkdir -p "$(dirname "$MODPATH$line")" && touch "$MODPATH$line"
-            done
+              "$android_key_store_spi_dex" \
+              "$instrumentation_dex" \
+              -d "$TMP/framework-patched"
+    if [ "$is_apm_patched" = "true" ]; then
+        unzip -qo "$TMP/framework-patched.jar" \
+              "$app_package_manager_dex" \
+              -d "$TMP/framework-patched"
     fi
-    ui_print "Some final touches ..."
-    rm -rf "$MODPATH/dex" "$MODPATH/func.sh" "$MODPATH/customize.sh"
-    ui_print " "
-    ui_print "FrameworkPatch set up successfully!"
+
+    num_of_classes="$(find "$TMP/framework-patched" -maxdepth 1 -type f -name "classes*.dex" | wc -l)"
+    mod_dex_name="classes$((num_of_classes+1)).dex"
+    ui_print "$num_of_classes dex files found in framework.jar"
+    ui_print "FrameworkPatch's compiled classes.dex renamed to $mod_dex_name and patched to framework.jar"
+    mv "$classes_dex" "$TMP/framework-patched/$mod_dex_name"
+    cd "$TMP/framework-patched" && zip -qr0 "$TMP/framework-patched.zip" .
+
+    if [ ! -e "$TMP/framework-patched.zip" ]; then
+        abort "Modifying framework.jar failed"
+    fi
+
+    ui_print "Optimising framework.jar with zipalign"
+    zipalign -f -p -z 4 "$TMP/framework-patched.zip" "$mod_framework"
+    if [ -e "$mod_framework" ]; then
+        ui_print "Cleaning boot-framework files ..."
+        if [ "$BOOTMODE" ] && { [ "$KSU" ] || [ "$APATCH" ]; }; then
+            find "/system/framework" -type f -name 'boot-framework.*' -print0 |
+                while IFS= read -r -d '' line; do
+                    mkdir -p "$(dirname "$MODPATH$line")" && mknod "$MODPATH$line" c 0 0
+                done
+        elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
+            find "/system/framework" -type f -name 'boot-framework.*' -print0 |
+                while IFS= read -r -d '' line; do
+                    mkdir -p "$(dirname "$MODPATH$line")" && touch "$MODPATH$line"
+                done
+        fi
+        ui_print "Some final touches ..."
+        rm -rf "$MODPATH/dex" "$MODPATH/func.sh" "$MODPATH/customize.sh"
+        ui_print " "
+        ui_print "FrameworkPatch set up successfully!"
+    else
+        ui_print " "
+        abort "FrameworkPatch set up failed!"
+    fi
 else
-    ui_print " "
-    abort "FrameworkPatch set up failed!"
+    abort "No patch is applied at all."
 fi
 ui_print " "
