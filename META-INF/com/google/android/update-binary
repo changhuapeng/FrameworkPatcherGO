@@ -77,10 +77,12 @@ setup_bb() {
       mkdir -p /system/bin
       ln -sf "$(command -v sh)" /system/bin/sh
    fi
+   bin=$(find_bin busybox)
    if [ -e "$bb" ]; then
      if ! echo "read me" | "$bb" grep -q "read me"; then
-        abort "ERROR:4: BusyBox cannot load on this device!"
+        abort "ERROR:5: BusyBox cannot load on this device!"
      elif ! "$bb" --install -s "$l"; then
+        echo "- Set up BusyBox applets"
         for i in $("$bb" --list); do
           if ! ln -sf "$bb" "$l/$i" && ! "$bb" ln -sf "$bb" "$l/$i" && ! "$bb" ln -f "$bb" "$l/$i"; then
             # create script wrapper if symlinking and hardlinking failed because of restrictive selinux policy
@@ -90,10 +92,26 @@ setup_bb() {
           fi
         done
      fi
+     echo "- External BusyBox loaded"
+   elif [ -e "$bin" ]; then
+     if ! echo "read me" | "$bin" grep -q "read me"; then
+        abort "ERROR:6: BusyBox cannot load on this device!"
+     elif ! "$bin" --install -s "$l"; then
+        echo "- Set up BusyBox applets"
+        for i in $("$bin" --list); do
+          if ! ln -sf "$bin" "$l/$i" && ! "$bin" ln -sf "$bin" "$l/$i" && ! "$bin" ln -f "$bin" "$l/$i"; then
+            # create script wrapper if symlinking and hardlinking failed because of restrictive selinux policy
+            if ! echo "#!$bin" > "$l/$i" || ! chmod 755 "$l/$i"; then
+              abort "ERROR:3: Failed to setup BusyBox"
+            fi
+          fi
+        done
+     fi
+     echo "- Magisk BusyBox loaded"
    else
       abort "ERROR:1: Cant find BusyBox"
    fi
-   [ ! -f "$l/sh" ] && abort "ERROR:3: Failed to setup BusyBox"
+   [ ! -f "$l/sh" ] && abort "ERROR:4: Failed to setup BusyBox"
 }
 setup() {
   #Ensure work DIRs
@@ -102,13 +120,13 @@ setup() {
   [ ! -d "$l" -o ! -d "$TMP/zbin" ] && abort "ERROR: Cant startup"
 
   #Ensure BusyBox and Bash
+  bin=$(find_bin busybox)
   bb="$TMP/busybox"; bs="$TMP/bash"; ( rm -f "$bb" "$bs" ) 2>/dev/null
-  get busybox bash -from "$installzip" -in "META-INF/zbin" -to "$TMP"
-  if ! echo "read me" | "$bb" grep -q "read me"; then
+  get bash -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+  if ! echo "read me" | "$bin" grep -q "read me"; then
      unsupport=true
-     bin=$(find_bin busybox)
-     [ -n "$bin" ] && cp -f "$bin" "$bb" && chmod 755 "$bb"
-     echo "read me" | "$bb" grep -q "read me" && echo2 "setup: Using \"$bin\"" || abort "setup: BusyBox cannot load on this device!"
+     get busybox -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+     echo "read me" | "$bb" grep -q "read me" && echo2 "setup: Using \"$bb\"" || abort "setup: BusyBox cannot load on this device!"
   fi
   if [ -z "$("$bs" -c 'echo $BASH_VERSION')" ]; then
      unsupport=true
@@ -122,9 +140,6 @@ setup() {
 
   #Extracting zbin
   get bin core -from "$installzip" -in "META-INF/zbin" -to "$TMP"
-
-  #Extracting extra.zip (Optional)
-  unzip -l "$installzip" META-INF/addons/extra.zip | grep -q extra.zip && get extra.zip -from "$installzip" -in "META-INF/addons" -to "$TMP"
 
   #Ensure BusyBox Environment
   setup_bb; export PATH="$l:$PATH"
@@ -158,7 +173,7 @@ $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -qv grep && export BOOTMODE=
 #Start
 umask 022
 unsupport=false
-binary_paths=$(echo -e "/sbin\n/system/bin")
+binary_paths=$(echo -e "/sbin\n/system/bin\n/data/adb/magisk\n/data/adb/ksu/bin\n/data/adb/ap/bin")
 needed=true; ensure_bin unzip mkdir chmod mv
 needed=false; ensure_bin rm cp
 
@@ -173,7 +188,6 @@ done
 export TMPDIR="$TMP" \
 DNM="META-INF/com/google/android/magisk" \
 cert="META-INF/zbin/version.txt" \
-addons="$TMP/addons" \
 l="$TMP/ugu"
 
 setup "$@"
