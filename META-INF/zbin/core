@@ -2814,9 +2814,11 @@ string() {
    return $return
 }
 
-chooseport() {
-  # Keycheck binary by someone755 @Github
-  local error=0
+chooseport_legacy() {
+  # Keycheck binary by someone755 @Github, idea for code below by Zappo @xda-developers
+  # Calling it first time detects previous input. Calling it second time will do what we want
+  [ "$1" ] && local delay=$1 || local delay=3
+  local error=false
   while true; do
     sleep 1
     keycheck
@@ -2825,11 +2827,46 @@ chooseport() {
       return 0
     elif [ $SEL -eq 41 ]; then
       return 1
+    elif $error; then
+      abort "Volume key not detected!"
     else
-      abort " ERROR: keycheck "
+      error=true
+      echo "Volume key not detected. Try again"
     fi
   done
 }
+
+chooseport() {
+  # Original idea by chainfire and ianmacd @xda-developers
+  [ "$1" ] && local delay=$1 || local delay=3
+  local error=false
+  while true; do
+    local count=0
+    while true; do
+      /system/bin/getevent -lqc 1 2>&1 > $TMP/events &
+      sleep 1; count=$((count + 1))
+      if (`grep -q 'KEY_VOLUMEUP *DOWN' $TMP/events`); then
+        return 0
+      elif (`grep -q 'KEY_VOLUMEDOWN *DOWN' $TMP/events`); then
+        return 1
+      fi
+      [ $count -gt 10 ] && break
+    done
+    if $error; then
+      # abort "Volume key not detected!"
+      echo "Volume key not detected. Trying keycheck method"
+      export chooseport=chooseport_legacy VKSEL=chooseport_legacy
+      chooseport_legacy $delay
+      return $?
+    else
+      error=true
+      echo "Volume key not detected. Try again"
+    fi
+  done
+}
+
+# Keep old variable from previous versions of this
+VKSEL=chooseport
 
 find_block() {
    local BLOCK DEV DEVICE DEVNAME PARTNAME UEVENT
