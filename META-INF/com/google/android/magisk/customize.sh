@@ -120,7 +120,11 @@ i_method="public whitelist.*newApplication"
 ui_print "File found: $instrumentation_file"
 
 if (! grep -wlq "$instrumentation_file" -e "$i_static_method") && (! grep -wlq "$instrumentation_file" -e "$i_method"); then
-    abort "newApplication method not in Instrumentation.smali"
+    i_static_method="public static newApplication"
+    i_method="public newApplication"
+    if (! grep -wlq "$instrumentation_file" -e "$i_static_method") && (! grep -wlq "$instrumentation_file" -e "$i_method"); then
+        abort "newApplication method not in Instrumentation.smali"
+    fi
 fi
 
 ui_print " "
@@ -186,7 +190,7 @@ ui_print "> Patching ApplicationPackageManager.smali file ..."
 ui_print "******************************"
 app_package_manager_file="$(find "$TMP/framework" -type f -name "ApplicationPackageManager.smali")"
 app_package_manager_dex="$(classes_path_to_dex "$app_package_manager_file")"
-apm_method="public whitelist.*hasSystemFeature(Ljava/lang/String;)Z"
+apm_method="public .*hasSystemFeature(Ljava/lang/String;)Z"
 ui_print "File found: $app_package_manager_file"
 
 if (! grep -wlq "$app_package_manager_file" -e "$apm_method"); then
