@@ -319,17 +319,28 @@ if [ "$to_recompile" = "true" ]; then
     zipalign -f -p -z 4 "$TMP/framework-patched.zip" "$mod_framework"
     if [ -e "$mod_framework" ]; then
         ui_print "Cleaning boot-framework files ..."
-        if [ "$BOOTMODE" ] && { [ "$KSU" ] || [ "$APATCH" ]; }; then
-            find "/system/framework" -type f -name 'boot-framework.*' -print0 |
-                while IFS= read -r -d '' line; do
-                    mkdir -p "$(dirname "$MODPATH$line")" && mknod "$MODPATH$line" c 0 0
-                done
-        elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
-            find "/system/framework" -type f -name 'boot-framework.*' -print0 |
-                while IFS= read -r -d '' line; do
-                    mkdir -p "$(dirname "$MODPATH$line")" && touch "$MODPATH$line"
-                done
+        ui_print " "
+        ui_print "This step is not required unless your device crashes after installing this module."
+        ui_print "Do you want to apply this step?"
+        ui_print "- YES  [Press volume UP]"
+        ui_print "- NO   [Press volume DOWN]"
+        ui_print " "
+        if $yes; then
+            if [ "$BOOTMODE" ] && { [ "$KSU" ] || [ "$APATCH" ]; }; then
+                find "/system/framework" -type f -name 'boot-framework.*' -print0 |
+                    while IFS= read -r -d '' line; do
+                        mkdir -p "$(dirname "$MODPATH$line")" && mknod "$MODPATH$line" c 0 0
+                    done
+            elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
+                find "/system/framework" -type f -name 'boot-framework.*' -print0 |
+                    while IFS= read -r -d '' line; do
+                        mkdir -p "$(dirname "$MODPATH$line")" && touch "$MODPATH$line"
+                    done
+            fi
+        else
+            ui_print "Skipped cleaning boot-framework files"
         fi
+
         ui_print "Some final touches ..."
         rm -rf "$MODPATH/dex" "$MODPATH/func.sh" "$MODPATH/customize.sh"
         ui_print " "
