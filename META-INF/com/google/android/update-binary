@@ -179,7 +179,15 @@ needed=true; ensure_bin unzip mkdir chmod mv
 needed=false; ensure_bin rm cp
 
 #Check device architecture
-{ [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; } || abort "ERROR: $ARCH not supported"
+ABI="$(getprop ro.product.cpu.abi)"
+echo "- $ABI detected"
+if echo "$ABI" | grep -q "armeabi"; then
+   ARCH="arm"
+elif echo "$ABI" | grep -q "arm64"; then
+   ARCH="arm64"
+else
+   { [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; } || abort "ERROR: $ABI not supported"
+fi
 
 #Ensure Temp directory
 for TMP in /dev/tmp$$ /cache/tmp$$ /mnt/tmp$$ /data/tmp$$ /data/local/tmp$$; do
