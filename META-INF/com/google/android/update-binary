@@ -122,10 +122,10 @@ setup() {
   #Ensure BusyBox and Bash
   bin=$(find_bin busybox)
   bb="$TMP/busybox"; bs="$TMP/bash"; ( rm -f "$bb" "$bs" ) 2>/dev/null
-  get bash -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+  get bash -from "$installzip" -in "META-INF/zbin/$ARCH" -to "$TMP"
   if ! echo "read me" | "$bin" grep -q "read me"; then
      unsupport=true
-     get busybox -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+     get busybox -from "$installzip" -in "META-INF/zbin/$ARCH" -to "$TMP"
      echo "read me" | "$bb" grep -q "read me" && echo2 "setup: Using \"$bb\"" || abort "setup: BusyBox cannot load on this device!"
   fi
   if [ -z "$("$bs" -c 'echo $BASH_VERSION')" ]; then
@@ -139,7 +139,8 @@ setup() {
   ( rm -f "$TMP/bin" "$TMP/bin.xz" "$TMP/extra.zip" "$TMP/core") 2>/dev/null
 
   #Extracting zbin
-  get bin core -from "$installzip" -in "META-INF/zbin" -to "$TMP"
+  get bin -from "$installzip" -in "META-INF/zbin/$ARCH" -to "$TMP"
+  get core -from "$installzip" -in "META-INF/zbin" -to "$TMP"
 
   #Ensure BusyBox Environment
   setup_bb; export PATH="$l:$PATH"
@@ -173,9 +174,12 @@ $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -qv grep && export BOOTMODE=
 #Start
 umask 022
 unsupport=false
-binary_paths=$(echo -e "/sbin\n/system/bin\n/data/adb/magisk\n/data/adb/ksu/bin\n/data/adb/ap/bin")
+binary_paths=$(echo -e "/sbin\n/system/bin\n/system_ext/bin\n/vendor/bin\n/product/bin\n/data/adb/magisk\n/data/adb/ksu/bin\n/data/adb/ap/bin")
 needed=true; ensure_bin unzip mkdir chmod mv
 needed=false; ensure_bin rm cp
+
+#Check device architecture
+{ [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; } || abort "ERROR: $ARCH not supported"
 
 #Ensure Temp directory
 for TMP in /dev/tmp$$ /cache/tmp$$ /mnt/tmp$$ /data/tmp$$ /data/local/tmp$$; do
