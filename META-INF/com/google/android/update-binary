@@ -185,8 +185,10 @@ if echo "$ABI" | grep -q "armeabi"; then
    ARCH="arm"
 elif echo "$ABI" | grep -q "arm64"; then
    ARCH="arm64"
-else
-   { [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; } || abort "ERROR: $ABI not supported"
+elif [ "$ABI" = "x86" ]; then
+   ARCH="x86"
+elif [ "$ABI" = "x64" ] || [ "$ABI" = "x86_64" ]; then
+   ARCH="x64"
 fi
 
 #Ensure Temp directory
